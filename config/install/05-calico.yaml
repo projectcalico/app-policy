@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Calico Version v3.0.2
-# https://docs.projectcalico.org/v3.0/releases
+# Calico Version v3.0.0-beta1
+# https://docs.projectcalico.org/v3.0/releases#v3.0.0-beta1
 # This manifest includes the following component versions:
-#   calico/node:v3.0.2
-#   calico/cni:v2.0.0
+#   calico/node:v3.0.0-beta1
+#   calico/cni:v2.0.0-beta1
 
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1beta1
@@ -195,7 +195,7 @@ spec:
         # container programs network policy and routes on each
         # host.
         - name: calico-node
-          image: quay.io/calico/node:v3.0.2
+          image: quay.io/calico/node:v3.0.1
           env:
             # Use Kubernetes API as the backing datastore.
             - name: DATASTORE_TYPE
