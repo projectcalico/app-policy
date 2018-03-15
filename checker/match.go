@@ -18,6 +18,8 @@ import (
 	"github.com/projectcalico/app-policy/proto"
 	"github.com/projectcalico/libcalico-go/lib/selector"
 
+	"strings"
+
 	authz "github.com/envoyproxy/data-plane-api/api/auth"
 	log "github.com/sirupsen/logrus"
 )
@@ -33,7 +35,8 @@ func match(rule *proto.Rule, req *requestCache, policyNamespace string) bool {
 	attr := req.Request.GetAttributes()
 	return matchSource(rule, req, policyNamespace) &&
 		matchDestination(rule, req, policyNamespace) &&
-		matchRequest(rule, attr.GetRequest())
+		matchRequest(rule, attr.GetRequest()) &&
+		matchL4Protocol(rule, attr.GetDestination())
 }
 
 func matchSource(r *proto.Rule, req *requestCache, policyNamespace string) bool {
@@ -173,4 +176,48 @@ func matchHTTPMethods(methods []string, reqMethod string) bool {
 	}
 	log.Debug("HTTP Method not matched.")
 	return false
+}
+
+func matchL4Protocol(rule *proto.Rule, dest *authz.AttributeContext_Peer) bool {
+	// Extract L4 protocol type of socket address for destination peer context. Match against rules.
+	if dest == nil {
+		log.Warn("nil request destination peer.")
+		return false
+	}
+
+	// default protocol is TCP
+	reqProtocol := "TCP"
+	if a := dest.GetAddress(); a != nil {
+		if sa := a.GetSocketAddress(); sa != nil {
+			reqProtocol = sa.GetProtocol().String()
+		}
+	}
+
+	checkStringInRuleProtocol := func(p *proto.Protocol, s string) bool {
+		// Check if given protocol string matches what is specified in rule.
+		if name := p.GetName(); name != "" {
+			return strings.ToLower(name) == strings.ToLower(s)
+		}
+
+		// Envoy supports TCP only. Add a k:v into the map if more protocol is supported in the future.
+		protocolMap := map[int32]string{6: "TCP"}
+		if name, ok := protocolMap[p.GetNumber()]; ok {
+			return strings.ToLower(name) == strings.ToLower(s)
+		}
+
+		return false
+	}
+
+	// Check protocol in rule first.
+	if protocal := rule.GetProtocol(); protocal != nil {
+		return checkStringInRuleProtocol(protocal, reqProtocol)
+	}
+
+	// Check notProtocol.
+	if protocal := rule.GetNotProtocol(); protocal != nil {
+		return !checkStringInRuleProtocol(protocal, reqProtocol)
+	}
+
+	// Match all protocols.
+	return true
 }
