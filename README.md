@@ -298,7 +298,13 @@ You will need the latest (nightly) build of `calicoctl`.  Exit out of any pods y
 
     wget https://www.projectcalico.org/builds/calicoctl
     chmod +x calicoctl
-    
+
+In this demo, we are using the Kubernetes API server as our data store
+(KDD mode in Calico).  To ensure that calicoctl is using the
+correct data store, you need to do the following
+
+    export DATASTORE_TYPE=kubernetes KUBECONFIG=<your Kubectl config>
+	
 The policy uses alpha features of Calico behind a feature flag.  Enable these features.
 
     export ALPHA_FEATURES=serviceaccounts,httprules
