@@ -24,6 +24,8 @@ import:
 - package: github.com/envoyproxy/data-plane-api
   version: 5d8712556c09c4c630e8d3479eddf212e9c88cd5
 - package: github.com/lyft/protoc-gen-validate
+  repo: https://github.com/envoyproxy/protoc-gen-validate
+  vcs: git
   version: v0.0.6
 - package: github.com/gogo/googleapis
 - package: github.com/onsi/gomega

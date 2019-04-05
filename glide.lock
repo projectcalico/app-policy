@@ -1,5 +1,5 @@
-hash: ae41f22234e51ca7e195bc3a457c576fdff78939f0bdc9ea873cfd16864bec15
-updated: 2019-04-05T04:04:52.325426971Z
+hash: b4dd2add20bec94b212c95a5ece764f5fd53c2d634e6d14719fb168b68e08f3e
+updated: 2019-04-05T14:35:19.926589-07:00
 imports:
 - name: github.com/docopt/docopt-go
   version: 784ddc588536785e7299f7272f39101f7faccc3f
@@ -9,23 +9,25 @@ imports:
   - envoy/api/v2/core
   - envoy/service/auth/v2alpha
 - name: github.com/gogo/googleapis
-  version: b23578765ee54ff6bceff57f397d833bf4ca6869
+  version: 08a7655d27152912db7aaf4f983275eaf8d128ef
   subpackages:
   - google/rpc
 - name: github.com/gogo/protobuf
-  version: c0656edd0d9eab7c66d1eb0c568f9039345796f7
+  version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
   - proto
   - sortkeys
   - types
 - name: github.com/golang/protobuf
-  version: b4deda0973fb4c70b50d226b1af49f3da59f5265
+  version: 1e59b77b52bf8e4b449a57e6f79f21226d571845
   subpackages:
   - proto
 - name: github.com/konsorten/go-windows-terminal-sequences
-  version: 5c8c8bd35d3832f5d134ae1e1e375b69a4d25242
+  version: f55edac94c9bbba5d6182a4be46d86a2c9b5b50e
 - name: github.com/lyft/protoc-gen-validate
   version: 930a67cf7ba41b9d9436ad7a1be70a5d5ff6e1fc
+  repo: https://github.com/envoyproxy/protoc-gen-validate
+  vcs: git
 - name: github.com/onsi/gomega
   version: 90e289841c1ed79b7a598a7cd9959750cb5e89e2
   subpackages:
@@ -52,7 +54,7 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 8bdbc7bcc01dcbb8ec23dc8a28e332258d25251f
 - name: golang.org/x/net
-  version: 1c05540f6879653db88113bc4a2b70aec4bd491f
+  version: 66aacef3dd8a676686c7ae3716979581e8b03c47
   subpackages:
   - context
   - html
@@ -110,4 +112,4 @@ imports:
   - pkg/util/validation
 testImports:
 - name: gopkg.in/yaml.v2
-  version: 670d4cfef0544295bc27a114dbac37980d83185a
+  version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
