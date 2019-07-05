@@ -1,5 +1,5 @@
-hash: 9098b43ddbc85eeb9fe2178a938217eeb551461e34c6fd1dfe46770711bf2303
-updated: 2019-07-05T04:13:07.024359344Z
+hash: a00acc0256f78f4c44f4736ec00b09e863bb7743e25da288b49819afafc0d9c0
+updated: 2019-07-05T17:30:16.904229144+01:00
 imports:
 - name: github.com/docopt/docopt-go
   version: 784ddc588536785e7299f7272f39101f7faccc3f
@@ -14,13 +14,13 @@ imports:
   subpackages:
   - google/rpc
 - name: github.com/gogo/protobuf
-  version: 67e450fba6944c63d2f80b7553b0ef522d345962
+  version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
   - proto
   - sortkeys
   - types
 - name: github.com/golang/protobuf
-  version: e91709a02e0e8ff8b86b7aa913fdc9ae9498e825
+  version: 1e59b77b52bf8e4b449a57e6f79f21226d571845
   subpackages:
   - proto
 - name: github.com/konsorten/go-windows-terminal-sequences
@@ -42,7 +42,7 @@ imports:
   - matchers/support/goraph/util
   - types
 - name: github.com/projectcalico/libcalico-go
-  version: afe2318bc0a3178c4d882a4ab214f98661fb028c
+  version: 714ce2bcad0cc2fc765ee63370904d7c2c473af4
   subpackages:
   - lib/apis/v3
   - lib/client
@@ -53,24 +53,24 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 839c75faf7f98a33d445d181f3018b5c3409a45e
 - name: golang.org/x/net
-  version: afa5a82059c6356159f699d81beff22a81842231
+  version: 66aacef3dd8a676686c7ae3716979581e8b03c47
   subpackages:
   - context
   - html
   - html/atom
   - html/charset
-  - http/httpguts
   - http2
   - http2/hpack
   - idna
   - internal/timeseries
+  - lex/httplex
   - trace
 - name: golang.org/x/sys
-  version: 953cdadca894cdc07be76fc99f95b40c28f06623
+  version: ebfc5b4631820b793c9010c87fd8fef0f39eb082
   subpackages:
   - unix
 - name: golang.org/x/text
-  version: f4905fbd45b6790792202848439271c74074bbfd
+  version: b19bf474d317b857955b12035d2c5acb57ce8b01
   subpackages:
   - encoding
   - encoding/charmap
@@ -82,8 +82,6 @@ imports:
   - encoding/simplifiedchinese
   - encoding/traditionalchinese
   - encoding/unicode
-  - internal/language
-  - internal/language/compact
   - internal/tag
   - internal/utf8internal
   - language
@@ -113,4 +111,4 @@ imports:
   - pkg/util/validation
 testImports:
 - name: gopkg.in/yaml.v2
-  version: 51d6538a90f86fe93ac480b35f37b2be17fef232
+  version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
