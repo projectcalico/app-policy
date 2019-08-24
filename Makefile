@@ -21,10 +21,10 @@ BUILDARCH ?= $(shell uname -m)
 
 # canonicalized names for host architecture
 ifeq ($(BUILDARCH),aarch64)
-        BUILDARCH=arm64
+	BUILDARCH=arm64
 endif
 ifeq ($(BUILDARCH),x86_64)
-        BUILDARCH=amd64
+	BUILDARCH=amd64
 endif
 
 # unless otherwise set, I am building for my own architecture, i.e. not cross-compiling
@@ -32,19 +32,10 @@ ARCH ?= $(BUILDARCH)
 
 # canonicalized names for target architecture
 ifeq ($(ARCH),aarch64)
-        override ARCH=arm64
+	override ARCH=arm64
 endif
 ifeq ($(ARCH),x86_64)
-        override ARCH=amd64
-endif
-
-# Build mounts for running in "local build" mode. Mount in libcalico, but null out
-# the vendor directory. This allows an easy build using local development code,
-# assuming that there is a local checkout of libcalico in the same directory as this repo.
-LOCAL_BUILD_MOUNTS ?=
-ifeq ($(LOCAL_BUILD),true)
-LOCAL_BUILD_MOUNTS = -v $(CURDIR)/../libcalico-go:/go/src/$(PACKAGE_NAME)/vendor/github.com/projectcalico/libcalico-go:ro \
-	-v $(CURDIR)/.empty:/go/src/$(PACKAGE_NAME)/vendor/github.com/projectcalico/libcalico-go/vendor:ro
+	override ARCH=amd64
 endif
 
 # we want to be able to run the same recipe on multiple targets keyed on the image name
@@ -68,7 +59,7 @@ EXCLUDEARCH ?= s390x
 VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
 ###############################################################################
-GO_BUILD_VER?=v0.20
+GO_BUILD_VER?=v0.24
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
 PROTOC_VER?=v0.1
 PROTOC_CONTAINER?=calico/protoc:$(PROTOC_VER)-$(BUILDARCH)
@@ -86,6 +77,12 @@ LOCAL_USER_ID:=$(shell id -u)
 MY_GID:=$(shell id -g)
 
 SRC_FILES=$(shell find -name '*.go' |grep -v vendor)
+
+# If local build is set, then always build the binary since we might not
+# detect when another local repository has been modified.
+ifeq ($(LOCAL_BUILD),true)
+.PHONY: $(SRC_FILES)
+endif
 
 ############################################################################
 BUILD_IMAGE?=calico/dikastes
@@ -106,6 +103,10 @@ PUSH_NONMANIFEST_IMAGES=$(filter-out $(PUSH_MANIFEST_IMAGES),$(PUSH_IMAGES))
 # location of docker credentials to push manifests
 DOCKER_CONFIG ?= $(HOME)/.docker/config.json
 
+EXTRA_DOCKER_ARGS       += -e GO111MODULE=on
+BUILD_FLAGS	     += -mod=vendor
+GINKGO_ARGS	     += -mod=vendor
+
 # Allow libcalico-go and the ssh auth sock to be mapped into the build container.
 ifdef LIBCALICOGO_PATH
   EXTRA_DOCKER_ARGS += -v $(LIBCALICOGO_PATH):/go/src/github.com/projectcalico/libcalico-go:ro
@@ -114,24 +115,75 @@ ifdef SSH_AUTH_SOCK
   EXTRA_DOCKER_ARGS += -v $(SSH_AUTH_SOCK):/ssh-agent --env SSH_AUTH_SOCK=/ssh-agent
 endif
 
- # Pre-configured docker run command that runs as this user with the repo
- # checked out to /code, uses the --rm flag to avoid leaving the container
- # around afterwards.
-DOCKER_RUN_RM:=docker run --rm \
-               $(EXTRA_DOCKER_ARGS) \
-               --user $(LOCAL_USER_ID):$(MY_GID) -v $(CURDIR):/code
+# Volume-mount gopath into the build container to cache go module's packages. If the environment is using multiple
+# comma-separated directories for gopath, use the first one, as that is the default one used by go modules.
+ifneq ($(GOPATH),)
+	# If the environment is using multiple comma-separated directories for gopath, use the first one, as that
+	# is the default one used by go modules.
+	GOMOD_CACHE = $(shell echo $(GOPATH) | cut -d':' -f1)/pkg/mod
+else
+	# If gopath is empty, default to $(HOME)/go.
+	GOMOD_CACHE = $(HOME)/go/pkg/mod
+endif
+
+EXTRA_DOCKER_ARGS += -v $(GOMOD_CACHE):/go/pkg/mod:rw
+
+DOCKER_RUN := mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
+	docker run --rm \
+		--net=host \
+		$(EXTRA_DOCKER_ARGS) \
+		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
+		-e GOCACHE=/go-cache \
+		-e GOARCH=$(ARCH) \
+		-e GOPATH=/go \
+		-v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
+		-v $(CURDIR)/.go-pkg-cache:/go-cache:rw \
+		-w /go/src/$(PACKAGE_NAME)
+
+DOCKER_RUN_RO := mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
+	docker run --rm \
+		--net=host \
+		$(EXTRA_DOCKER_ARGS) \
+		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
+		-e GOCACHE=/go-cache \
+		-e GOARCH=$(ARCH) \
+		-e GOPATH=/go \
+		-v $(CURDIR):/go/src/$(PACKAGE_NAME):ro \
+		-v $(CURDIR)/.go-pkg-cache:/go-cache:rw \
+		-w /go/src/$(PACKAGE_NAME)
+
+DOCKER_RUN_PB := docker run --rm \
+		$(EXTRA_DOCKER_ARGS) \
+		--user $(LOCAL_USER_ID):$(MY_GID) \
+		-v $(CURDIR):/code
+
+# Build mounts for running in "local build" mode. This allows an easy build using local development code,
+# assuming that there is a local checkout of libcalico in the same directory as this repo.
+PHONY:local_build
+
+ifdef LOCAL_BUILD
+EXTRA_DOCKER_ARGS+=-v $(CURDIR)/../libcalico-go:/go/src/github.com/projectcalico/libcalico-go:rw
+local_build:
+	$(DOCKER_RUN) $(CALICO_BUILD) go mod edit -replace=github.com/projectcalico/libcalico-go=../libcalico-go
+else
+local_build:
+	-$(DOCKER_RUN) $(CALICO_BUILD) go mod edit -dropreplace=github.com/projectcalico/libcalico-go
+endif
 
 ENVOY_API=vendor/github.com/envoyproxy/data-plane-api
-EXT_AUTH=$(ENVOY_API)/envoy/service/auth/v2alpha/
+EXT_AUTH=$(ENVOY_API)/envoy/service/auth/v2/
+EXT_AUTH_V2_ALPHA=$(ENVOY_API)/envoy/service/auth/v2alpha/
 ADDRESS=$(ENVOY_API)/envoy/api/v2/core/address
 V2_BASE=$(ENVOY_API)/envoy/api/v2/core/base
 HTTP_STATUS=$(ENVOY_API)/envoy/type/http_status
+PERCENT=$(ENVOY_API)/envoy/type/percent
 
 .PHONY: clean
 ## Clean enough that a new release build will be clean
 clean:
+	rm -rf .go-pkg-cache
 	find . -name '*.created-$(ARCH)' -exec rm -f {} +
-	rm -rf report/
+	rm -rf report vendor
 	# Only one pb.go file exists outside the vendor dir
 	rm -rf bin vendor proto/felixbackend.pb.go
 	-docker rmi $(BUILD_IMAGE):latest-$(ARCH)
@@ -149,63 +201,73 @@ build-all: $(addprefix bin/dikastes-,$(VALIDARCHES))
 
 .PHONY: build
 ## Build the binary for the current architecture and platform
-build: bin/dikastes-$(ARCH)
+build: bin/dikastes-$(ARCH) bin/healthz-$(ARCH)
 
 ## Create the vendor directory
-vendor: glide.yaml
-	# Ensure that the glide cache directory exists.
-	mkdir -p $(HOME)/.glide
-
-	# To build without Docker just run "glide install -strip-vendor"
-	docker run --rm -i \
-      -v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
-      -v $(HOME)/.glide:/home/user/.glide:rw \
-      -e LOCAL_USER_ID=$(LOCAL_USER_ID) \
-      -w /go/src/$(PACKAGE_NAME) \
-      $(CALICO_BUILD) glide install -strip-vendor
+vendor: go.mod go.sum
+	$(DOCKER_RUN) $(CALICO_BUILD) bash -c ' \
+	go mod download; \
+	go mod vendor; \
+	mkdir -p vendor/github.com/envoyproxy; \
+	mkdir -p vendor/github.com/gogo; \
+	mkdir -p vendor/github.com/lyft; \
+	mkdir -p vendor/github.com/golang; \
+	cp -fr `go list -m -f "{{.Dir}}" github.com/gogo/protobuf`/* vendor/github.com/gogo/protobuf; \
+	cp -fr `go list -m -f "{{.Dir}}" github.com/envoyproxy/data-plane-api` vendor/github.com/envoyproxy/data-plane-api; \
+	cp -fr `go list -m -f "{{.Dir}}" github.com/lyft/protoc-gen-validate` vendor/github.com/lyft/protoc-gen-validate; \
+	cp -fr `go list -m -f "{{.Dir}}" github.com/golang/protobuf`/* vendor/github.com/golang/protobuf'
+	chmod -R +w vendor/github.com
 
 # Default the libcalico repo and version but allow them to be overridden
 LIBCALICO_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 LIBCALICO_REPO?=github.com/projectcalico/libcalico-go
 LIBCALICO_VERSION?=$(shell git ls-remote git@github.com:projectcalico/libcalico-go $(LIBCALICO_BRANCH) 2>/dev/null | cut -f 1)
+LIBCALICO_OLDVER?=$(shell $(DOCKER_RUN) $(CALICO_BUILD) go list -m -f "{{.Version}}" github.com/projectcalico/libcalico-go)
 
 ## Update libcalico pin in glide.yaml
 update-libcalico:
-	docker run --rm -i \
-          -v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
-          -v $(HOME)/.glide:/home/user/.glide:rw \
-          -e LOCAL_USER_ID=$(LOCAL_USER_ID) \
-          -w /go/src/$(PACKAGE_NAME) \
-          $(CALICO_BUILD) sh -c '\
-        echo "Updating libcalico to $(LIBCALICO_VERSION) from $(LIBCALICO_REPO)"; \
-        export OLD_VER=$$(grep --after 50 libcalico-go glide.yaml |grep --max-count=1 --only-matching --perl-regexp "version:\s*\K[\.0-9a-z]+") ;\
-        echo "Old version: $$OLD_VER";\
-        if [ $(LIBCALICO_VERSION) != $$OLD_VER ]; then \
-            sed -i "s/$$OLD_VER/$(LIBCALICO_VERSION)/" glide.yaml && \
-            if [ $(LIBCALICO_REPO) != "github.com/projectcalico/libcalico-go" ]; then \
-              glide mirror set https://github.com/projectcalico/libcalico-go $(LIBCALICO_REPO) --vcs git; glide mirror list; \
-            fi;\
-          OUTPUT=`mktemp`;\
-          glide up --strip-vendor 2>&1 | tee $$OUTPUT; \
-          if ! grep "\[WARN\]" $$OUTPUT; then true; else false; fi; \
-        fi'
+	$(DOCKER_RUN) -i $(CALICO_BUILD) sh -c '\
+	if [[ ! -z "$(LIBCALICO_VERSION)" ]] && [[ "$(LIBCALICO_VERSION)" != "$(LIBCALICO_OLDVER)" ]]; then \
+		echo "Updating libcalico version $(LIBCALICO_OLDVER) to $(LIBCALICO_VERSION) from $(LIBCALICO_REPO)"; \
+		go mod edit -droprequire github.com/projectcalico/libcalico-go; \
+		go get $(LIBCALICO_REPO)@$(LIBCALICO_VERSION); \
+		if [ "$(LIBCALICO_REPO)" != "github.com/projectcalico/libcalico-go" ]; then \
+			go mod edit -replace github.com/projectcalico/libcalico-go=$(LIBCALICO_REPO)@$(LIBCALICO_VERSION); \
+		fi;\
+		go mod vendor; \
+	fi'
+
+git-status:
+	git status --porcelain
+
+git-commit:
+	git diff-index --quiet HEAD || git commit -m "Semaphore Automatic Update" -c user.name="Semaphore Automatic Update" -c user.email="<marvin@tigera.io>" go.mod go.sum
+
+git-push:
+	git push
+
+commit-pin-updates: update-libcalico git-status ci git-commit git-push
 
 bin/dikastes-amd64: ARCH=amd64
 bin/dikastes-arm64: ARCH=arm64
 bin/dikastes-ppc64le: ARCH=ppc64le
 bin/dikastes-s390x: ARCH=s390x
-bin/dikastes-%: vendor proto $(SRC_FILES)
+bin/dikastes-%: local_build vendor proto $(SRC_FILES)
 	mkdir -p bin
-	-mkdir -p .go-pkg-cache
-	docker run --rm -ti \
-	  -v $(CURDIR):/go/src/$(PACKAGE_NAME):ro \
+	$(DOCKER_RUN_RO) -ti \
 	  -v $(CURDIR)/bin:/go/src/$(PACKAGE_NAME)/bin \
-	  -v $(CURDIR)/.go-pkg-cache:/go-cache/:rw \
-	  $(LOCAL_BUILD_MOUNTS) \
-	  -e LOCAL_USER_ID=$(LOCAL_USER_ID) \
-	  -e GOCACHE=/go-cache \
-	  -w /go/src/$(PACKAGE_NAME) \
-	  $(CALICO_BUILD) go build -ldflags "-X main.VERSION=$(GIT_VERSION) -s -w" -v -o bin/dikastes-$(ARCH)
+	  $(CALICO_BUILD) go build $(BUILD_FLAGS) -ldflags "-X main.VERSION=$(GIT_VERSION) -s -w" -v -o bin/dikastes-$(ARCH) ./cmd/dikastes
+
+bin/healthz-amd64: ARCH=amd64
+bin/healthz-arm64: ARCH=arm64
+bin/healthz-ppc64le: ARCH=ppc64le
+bin/healthz-s390x: ARCH=s390x
+bin/healthz-%: local_build vendor proto $(SRC_FILES)
+	mkdir -p bin || true
+	-mkdir -p .go-pkg-cache $(GOMOD_CACHE) || true
+	$(DOCKER_RUN_RO) -ti \
+	  -v $(CURDIR)/bin:/go/src/$(PACKAGE_NAME)/bin \
+	  $(CALICO_BUILD) go build $(BUILD_FLAGS) -ldflags "-X main.VERSION=$(GIT_VERSION) -s -w" -v -o bin/healthz-$(ARCH) ./cmd/healthz
 
 # We use gogofast for protobuf compilation.  Regular gogo is incompatible with
 # gRPC, since gRPC uses golang/protobuf for marshalling/unmarshalling in that
@@ -215,48 +277,69 @@ bin/dikastes-%: vendor proto $(SRC_FILES)
 # When importing, we must use gogo versions of google/protobuf and
 # google/rpc (aka googleapis).
 PROTOC_IMPORTS =  -I $(ENVOY_API) \
-                  -I vendor/github.com/gogo/protobuf/protobuf \
-                  -I vendor/github.com/gogo/protobuf \
-                  -I vendor/github.com/lyft/protoc-gen-validate\
-                  -I vendor/github.com/gogo/googleapis\
-                  -I proto\
-                  -I ./
+		  -I vendor/github.com/gogo/protobuf/protobuf \
+		  -I vendor/github.com/gogo/protobuf \
+		  -I vendor/github.com/lyft/protoc-gen-validate\
+		  -I vendor/github.com/gogo/googleapis\
+		  -I proto\
+		  -I ./
 # Also remap the output modules to gogo versions of google/protobuf and google/rpc
-PROTOC_MAPPINGS = Menvoy/api/v2/core/address.proto=github.com/envoyproxy/data-plane-api/envoy/api/v2/core,Menvoy/api/v2/core/base.proto=github.com/envoyproxy/data-plane-api/envoy/api/v2/core,Menvoy/type/http_status.proto=github.com/envoyproxy/data-plane-api/envoy/type,Mgogoproto/gogo.proto=github.com/gogo/protobuf/gogoproto,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/struct.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/rpc/status.proto=github.com/gogo/googleapis/google/rpc
+PROTOC_MAPPINGS = Menvoy/api/v2/core/address.proto=github.com/envoyproxy/data-plane-api/envoy/api/v2/core,Menvoy/api/v2/core/base.proto=github.com/envoyproxy/data-plane-api/envoy/api/v2/core,Menvoy/type/http_status.proto=github.com/envoyproxy/data-plane-api/envoy/type,Menvoy/type/percent.proto=github.com/envoyproxy/data-plane-api/envoy/type,Mgogoproto/gogo.proto=github.com/gogo/protobuf/gogoproto,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/struct.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/rpc/status.proto=github.com/gogo/googleapis/google/rpc,Menvoy/service/auth/v2/external_auth.proto=github.com/envoyproxy/data-plane-api/envoy/service/auth/v2
 
-proto: $(EXT_AUTH)external_auth.pb.go $(ADDRESS).pb.go $(V2_BASE).pb.go $(HTTP_STATUS).pb.go $(EXT_AUTH)attribute_context.pb.go proto/felixbackend.pb.go
+proto: $(EXT_AUTH)external_auth.pb.go $(EXT_AUTH_V2_ALPHA)external_auth.pb.go $(ADDRESS).pb.go $(V2_BASE).pb.go $(HTTP_STATUS).pb.go $(PERCENT).pb.go $(EXT_AUTH)attribute_context.pb.go proto/felixbackend.pb.go proto/healthz.proto
 
 $(EXT_AUTH)external_auth.pb.go $(EXT_AUTH)attribute_context.pb.go: $(EXT_AUTH)external_auth.proto $(EXT_AUTH)attribute_context.proto
-	$(DOCKER_RUN_RM) -v $(CURDIR):/src:rw \
-	              $(PROTOC_CONTAINER) \
-	              $(PROTOC_IMPORTS) \
-	              $(EXT_AUTH)*.proto \
-	              --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):$(ENVOY_API)
+	$(DOCKER_RUN_PB) -v $(CURDIR):/src:rw \
+		      $(PROTOC_CONTAINER) \
+		      $(PROTOC_IMPORTS) \
+		      $(EXT_AUTH)*.proto \
+		      --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):$(ENVOY_API)
+
+$(EXT_AUTH_V2_ALPHA)external_auth.pb.go: $(EXT_AUTH_V2_ALPHA)external_auth.proto
+	$(DOCKER_RUN_PB) -v $(CURDIR):/src:rw \
+		      $(PROTOC_CONTAINER) \
+		      $(PROTOC_IMPORTS) \
+		      $(EXT_AUTH_V2_ALPHA)*.proto \
+		      --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):$(ENVOY_API)
 
 $(ADDRESS).pb.go $(V2_BASE).pb.go: $(ADDRESS).proto $(V2_BASE).proto
-	$(DOCKER_RUN_RM) -v $(CURDIR):/src:rw \
-	              $(PROTOC_CONTAINER) \
-	              $(PROTOC_IMPORTS) \
-	              $(ADDRESS).proto $(V2_BASE).proto \
-	              --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):$(ENVOY_API)
+	$(DOCKER_RUN_PB) -v $(CURDIR):/src:rw \
+		      $(PROTOC_CONTAINER) \
+		      $(PROTOC_IMPORTS) \
+		      $(ADDRESS).proto $(V2_BASE).proto \
+		      --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):$(ENVOY_API)
 
 $(HTTP_STATUS).pb.go: $(HTTP_STATUS).proto
-	$(DOCKER_RUN_RM) -v $(CURDIR):/src:rw \
-	              $(PROTOC_CONTAINER) \
-	              $(PROTOC_IMPORTS) \
-	              $(HTTP_STATUS).proto \
-	              --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):$(ENVOY_API)
+	$(DOCKER_RUN_PB) -v $(CURDIR):/src:rw \
+		      $(PROTOC_CONTAINER) \
+		      $(PROTOC_IMPORTS) \
+		      $(HTTP_STATUS).proto \
+		      --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):$(ENVOY_API)
 
-$(EXT_AUTH)external_auth.proto $(ADDRESS).proto $(V2_BASE).proto $(HTTP_STATUS).proto $(EXT_AUTH)attribute_context.proto: vendor
+$(PERCENT).pb.go: $(PERCENT).proto
+	$(DOCKER_RUN_PB) -v $(CURDIR):/src:rw \
+		      $(PROTOC_CONTAINER) \
+		      $(PROTOC_IMPORTS) \
+		      $(PERCENT).proto \
+		      --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):$(ENVOY_API)
+
+$(EXT_AUTH)external_auth.proto $(EXT_AUTH_V2_ALPHA)external_auth.proto $(ADDRESS).proto $(V2_BASE).proto $(HTTP_STATUS).proto $(PERCENT).proto $(EXT_AUTH)attribute_context.proto: vendor
 
 proto/felixbackend.pb.go: proto/felixbackend.proto
-	$(DOCKER_RUN_RM) -v $(CURDIR):/src:rw \
-	              $(PROTOC_CONTAINER) \
-	              $(PROTOC_IMPORTS) \
-	              proto/*.proto \
-	              --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):proto
+	$(DOCKER_RUN_PB) -v $(CURDIR):/src:rw \
+		      $(PROTOC_CONTAINER) \
+		      $(PROTOC_IMPORTS) \
+		      proto/*.proto \
+		      --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):proto
 
-###############################################################################
+proto/healthz.pb.go: proto/healthz.proto
+	$(DOCKER_RUN_PB) -v $(CURDIR):/src:rw \
+		      $(PROTOC_CONTAINER) \
+		      $(PROTOC_IMPORTS) \
+		      proto/*.proto \
+		      --gogofast_out=plugins=grpc,$(PROTOC_MAPPINGS):proto
+
+
 # Building the image
 ###############################################################################
 CONTAINER_CREATED=.dikastes.created-$(ARCH)
@@ -267,7 +350,7 @@ sub-image-%:
 	$(MAKE) image ARCH=$*
 
 $(BUILD_IMAGE): $(CONTAINER_CREATED)
-$(CONTAINER_CREATED): Dockerfile.$(ARCH) bin/dikastes-$(ARCH)
+$(CONTAINER_CREATED): Dockerfile.$(ARCH) bin/dikastes-$(ARCH) bin/healthz-$(ARCH)
 	docker build -t $(BUILD_IMAGE):latest-$(ARCH) --build-arg QEMU_IMAGE=$(CALICO_BUILD) -f Dockerfile.$(ARCH) .
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
@@ -328,24 +411,25 @@ sub-tag-images-%:
 # Static checks
 ###############################################################################
 ## Perform static checks on the code.
+
+# TODO: re-enable these linters !
+LINT_ARGS := --disable gosimple,staticcheck,govet,typecheck,errcheck,deadcode,unused
+
 .PHONY: static-checks
-static-checks: vendor
-	docker run --rm \
-		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
-		-v $(CURDIR):/go/src/$(PACKAGE_NAME) \
-		-w /go/src/$(PACKAGE_NAME) \
-		$(CALICO_BUILD) gometalinter --deadline=300s --disable-all --enable=goimports --vendor ./...
+static-checks: build
+	$(DOCKER_RUN) $(CALICO_BUILD) sh -c 'GO111MODULE=off golangci-lint run --deadline 5m $(LINT_ARGS)'
 
 .PHONY: fix
 ## Fix static checks
 fix:
 	goimports -w $(SRC_FILES)
 
-foss-checks: vendor
+foss-checks: build-all
 	@echo Running $@...
 	@docker run --rm -v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
 	  -e LOCAL_USER_ID=$(LOCAL_USER_ID) \
 	  -e FOSSA_API_KEY=$(FOSSA_API_KEY) \
+	  -e GO111MODULE=on \
 	  -w /go/src/$(PACKAGE_NAME) \
 	  $(CALICO_BUILD) /usr/local/bin/fossa
 
@@ -354,13 +438,9 @@ foss-checks: vendor
 ###############################################################################
 .PHONY: ut
 ## Run the tests in a container. Useful for CI, Mac dev
-ut: proto
+ut: local_build proto
 	mkdir -p report
-	docker run --rm -v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
-		$(LOCAL_BUILD_MOUNTS) \
-		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
-		-w /go/src/$(PACKAGE_NAME) \
-		$(CALICO_BUILD) /bin/bash -c "go test -v ./... | go-junit-report > ./report/tests.xml"
+	$(DOCKER_RUN) $(CALICO_BUILD) /bin/bash -c "go test -v $(GINKGO_ARGS) ./... | go-junit-report > ./report/tests.xml"
 
 ###############################################################################
 # CI
@@ -476,15 +556,20 @@ endif
 .PHONY: help
 ## Display this help text
 help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383502660
-	@awk '/^[a-zA-Z\-\_0-9\/]+:/ {                                      \
-		nb = sub( /^## /, "", helpMsg );                                \
-		if(nb == 0) {                                                   \
-			helpMsg = $$0;                                              \
-			nb = sub( /^[^:]*:.* ## /, "", helpMsg );                   \
-		}                                                               \
-		if (nb)                                                         \
+	@awk '/^[a-zA-Z\-\_0-9\/]+:/ {				      \
+		nb = sub( /^## /, "", helpMsg );				\
+		if(nb == 0) {						   \
+			helpMsg = $$0;					      \
+			nb = sub( /^[^:]*:.* ## /, "", helpMsg );		   \
+		}							       \
+		if (nb)							 \
 			printf "\033[1;31m%-" width "s\033[0m %s\n", $$1, helpMsg;  \
-	}                                                                   \
-	{ helpMsg = $$0 }'                                                  \
-	width=20                                                            \
+	}								   \
+	{ helpMsg = $$0 }'						  \
+	width=20							    \
 	$(MAKEFILE_LIST)
+
+.PHONY: install-git-hooks
+## Install Git hooks
+install-git-hooks:
+	./install-git-hooks
