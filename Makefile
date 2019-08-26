@@ -201,7 +201,7 @@ build-all: $(addprefix bin/dikastes-,$(VALIDARCHES))
 
 .PHONY: build
 ## Build the binary for the current architecture and platform
-build: bin/dikastes-$(ARCH) bin/healthz-$(ARCH)
+build: local_build bin/dikastes-$(ARCH) bin/healthz-$(ARCH)
 
 ## Create the vendor directory
 vendor: go.mod go.sum
