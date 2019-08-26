@@ -201,7 +201,7 @@ build-all: $(addprefix bin/dikastes-,$(VALIDARCHES))
 
 .PHONY: build
 ## Build the binary for the current architecture and platform
-build: bin/dikastes-$(ARCH) bin/healthz-$(ARCH)
+build: local_build bin/dikastes-$(ARCH) bin/healthz-$(ARCH)
 
 ## Create the vendor directory
 vendor: go.mod go.sum
@@ -240,13 +240,17 @@ update-libcalico:
 git-status:
 	git status --porcelain
 
+git-config:
+	git config --global user.name "Semaphore Automatic Update"
+	git config --global user.email "marvin@tigera.io"
+
 git-commit:
 	git diff-index --quiet HEAD || git commit -m "Semaphore Automatic Update" -c user.name="Semaphore Automatic Update" -c user.email="<marvin@tigera.io>" go.mod go.sum
 
 git-push:
 	git push
 
-commit-pin-updates: update-libcalico git-status ci git-commit git-push
+commit-pin-updates: update-libcalico git-status ci git-config git-commit git-push
 
 bin/dikastes-amd64: ARCH=amd64
 bin/dikastes-arm64: ARCH=arm64
