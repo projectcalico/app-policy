@@ -11,7 +11,7 @@ test: ut
 # Both native and cross architecture builds are supported.
 # The target architecture is select by setting the ARCH variable.
 # When ARCH is undefined it is set to the detected host architecture.
-# When ARCH differs from the host architecture a crossbuild will be performed.
+# When ARCH differs from the host architecture a crossbuild will be pedrformed.
 ARCHES=$(patsubst Dockerfile.%,%,$(wildcard Dockerfile.*))
 
 # BUILDARCH is the host architecture
@@ -266,7 +266,7 @@ bin/dikastes-ppc64le: ARCH=ppc64le
 bin/dikastes-s390x: ARCH=s390x
 bin/dikastes-%: local_build vendor proto $(SRC_FILES)
 	mkdir -p bin
-	$(DOCKER_RUN_RO) -ti \
+	$(DOCKER_RUN_RO) \
 	  -v $(CURDIR)/bin:/go/src/$(PACKAGE_NAME)/bin \
 	  $(CALICO_BUILD) go build $(BUILD_FLAGS) -ldflags "-X main.VERSION=$(GIT_VERSION) -s -w" -v -o bin/dikastes-$(ARCH) ./cmd/dikastes
 
@@ -277,7 +277,7 @@ bin/healthz-s390x: ARCH=s390x
 bin/healthz-%: local_build vendor proto $(SRC_FILES)
 	mkdir -p bin || true
 	-mkdir -p .go-pkg-cache $(GOMOD_CACHE) || true
-	$(DOCKER_RUN_RO) -ti \
+	$(DOCKER_RUN_RO) \
 	  -v $(CURDIR)/bin:/go/src/$(PACKAGE_NAME)/bin \
 	  $(CALICO_BUILD) go build $(BUILD_FLAGS) -ldflags "-X main.VERSION=$(GIT_VERSION) -s -w" -v -o bin/healthz-$(ARCH) ./cmd/healthz
 
