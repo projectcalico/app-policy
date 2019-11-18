@@ -71,22 +71,19 @@ build-all: $(addprefix bin/dikastes-,$(VALIDARCHES))
 build: bin/dikastes-$(ARCH) bin/healthz-$(ARCH)
 
 ## Create the vendor directory
-vendor: go.mod go.sum
+vendor: go.mod go.sum mod-download
 	$(DOCKER_RUN) $(CALICO_BUILD) bash -c ' \
-		go mod download; \
-		go mod vendor; \
-		# We need to checkout go.mod and go.sum since the vendor command \
-		# can sometimes modify these files, causing a dirty tree. \
-		git checkout go.mod go.sum; \
-		mkdir -p vendor/github.com/envoyproxy; \
-		mkdir -p vendor/github.com/gogo; \
-		mkdir -p vendor/github.com/lyft; \
-		mkdir -p vendor/github.com/golang; \
+		mkdir -p vendor/github.com/envoyproxy/data-plane-api/envoy; \
+		mkdir -p vendor/github.com/gogo/protobuf; \
+		mkdir -p vendor/github.com/gogo/googleapis; \
+		mkdir -p vendor/github.com/lyft/protoc-gen-validate; \
+		mkdir -p vendor/github.com/golang/protobuf; \
 		cp -fr `go list -m -f "{{.Dir}}" github.com/gogo/protobuf`/* vendor/github.com/gogo/protobuf; \
-		cp -fr `go list -m -f "{{.Dir}}" github.com/envoyproxy/data-plane-api` vendor/github.com/envoyproxy/data-plane-api; \
-		cp -fr `go list -m -f "{{.Dir}}" github.com/lyft/protoc-gen-validate` vendor/github.com/lyft/protoc-gen-validate; \
-		cp -fr `go list -m -f "{{.Dir}}" github.com/golang/protobuf`/* vendor/github.com/golang/protobuf'
-	chmod -R +w vendor/github.com
+		cp -fr `go list -m -f "{{.Dir}}" github.com/envoyproxy/data-plane-api`/* vendor/github.com/envoyproxy/data-plane-api; \
+		cp -fr `go list -m -f "{{.Dir}}" github.com/lyft/protoc-gen-validate`/* vendor/github.com/lyft/protoc-gen-validate; \
+		cp -fr `go list -m -f "{{.Dir}}" github.com/golang/protobuf`/* vendor/github.com/golang/protobuf; \
+		chmod -R +w vendor; \
+		go mod vendor'
 
 bin/dikastes-amd64: ARCH=amd64
 bin/dikastes-arm64: ARCH=arm64
