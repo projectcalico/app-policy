@@ -1,18 +1,29 @@
-GO_BUILD_VER?=v0.27
+PACKAGE_NAME=github.com/projectcalico/app-policy
+GO_BUILD_VER=v0.27
 
+###############################################################################
+# Download and include Makefile.common before anything else
+###############################################################################
 MAKE_BRANCH?=$(GO_BUILD_VER)
-MAKE_REPO?=https://raw.githubusercontent.com/projectcalico/go-build/$(MAKE_BRANCH)/Makefile.common
+MAKE_REPO?=https://raw.githubusercontent.com/projectcalico/go-build/$(MAKE_BRANCH)
 
-get_common:=$(shell wget -nc -nv $(MAKE_REPO) -O Makefile.common)
+Makefile.common: Makefile.common.$(MAKE_BRANCH)
+	cp "$<" "$@"
+Makefile.common.$(MAKE_BRANCH):
+	# Clean up any files downloaded from other branches so they don't accumulate.
+	rm -f Makefile.common.*
+	wget -nv $(MAKE_REPO)/Makefile.common -O "$@"
+
 include Makefile.common
+
+###############################################################################
 
 BUILD_IMAGE?=calico/dikastes
 PUSH_IMAGES?=$(BUILD_IMAGE) quay.io/calico/dikastes
 RELEASE_IMAGES?=gcr.io/projectcalico-org/dikastes eu.gcr.io/projectcalico-org/dikastes asia.gcr.io/projectcalico-org/dikastes us.gcr.io/projectcalico-org/dikastes
-PACKAGE_NAME?=github.com/projectcalico/app-policy
 
-BUILD_FLAGS		+= -mod=vendor
-GINKGO_ARGS		+= -mod=vendor
+BUILD_FLAGS	+= -mod=vendor
+GINKGO_ARGS	+= -mod=vendor
 
 # Build mounts for running in "local build" mode. This allows an easy build using local development code,
 # assuming that there is a local checkout of libcalico in the same directory as this repo.
@@ -54,6 +65,7 @@ ifeq ($(ARCH),amd64)
 	-docker rmi $(BUILD_IMAGE):latest
 	-docker rmi $(BUILD_IMAGE):$(VERSION)
 endif
+
 ###############################################################################
 # Updating pins
 ###############################################################################
