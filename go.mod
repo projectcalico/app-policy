@@ -13,7 +13,7 @@ require (
 	github.com/onsi/gomega v1.5.0
 	github.com/pborman/uuid v0.0.0-20150603214016-ca53cad383ca // indirect
 	github.com/projectcalico/go-yaml v0.0.0-20161201183616-955bc3e451ef // indirect
-	github.com/projectcalico/libcalico-go v1.7.2-0.20191119183141-c072e7a2fae4
+	github.com/projectcalico/libcalico-go v1.7.2-0.20191122034129-d601846715fa
 	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/afero v1.2.2 // indirect

@@ -2,7 +2,9 @@ PACKAGE_NAME=github.com/projectcalico/app-policy
 GO_BUILD_VER=v0.27
 
 ###############################################################################
-# Download and include Makefile.common before anything else
+# Download and include Makefile.common
+#   Additions to EXTRA_DOCKER_ARGS need to happen before the include since
+#   that variable is evaluated when we declare DOCKER_RUN and siblings.
 ###############################################################################
 MAKE_BRANCH?=$(GO_BUILD_VER)
 MAKE_REPO?=https://raw.githubusercontent.com/projectcalico/go-build/$(MAKE_BRANCH)
@@ -13,6 +15,18 @@ Makefile.common.$(MAKE_BRANCH):
 	# Clean up any files downloaded from other branches so they don't accumulate.
 	rm -f Makefile.common.*
 	wget -nv $(MAKE_REPO)/Makefile.common -O "$@"
+
+# Build mounts for running in "local build" mode. This allows an easy build using local development code,
+# assuming that there is a local checkout of libcalico in the same directory as this repo.
+ifdef LOCAL_BUILD
+PHONY: set-up-local-build
+LOCAL_BUILD_DEP:=set-up-local-build
+
+EXTRA_DOCKER_ARGS+=-v $(CURDIR)/../libcalico-go:/go/src/github.com/projectcalico/libcalico-go:rw
+
+$(LOCAL_BUILD_DEP):
+	$(DOCKER_RUN) $(CALICO_BUILD) go mod edit -replace=github.com/projectcalico/libcalico-go=../libcalico-go
+endif
 
 include Makefile.common
 
@@ -27,14 +41,14 @@ GINKGO_ARGS	+= -mod=vendor
 
 # Build mounts for running in "local build" mode. This allows an easy build using local development code,
 # assuming that there is a local checkout of libcalico in the same directory as this repo.
-PHONY:local_build
+PHONY:$(LOCAL_BUILD_DEP)
 
 ifdef LOCAL_BUILD
 EXTRA_DOCKER_ARGS+=-v $(CURDIR)/../libcalico-go:/go/src/github.com/projectcalico/libcalico-go:rw
-local_build:
+$(LOCAL_BUILD_DEP):
 	$(DOCKER_RUN) $(CALICO_BUILD) go mod edit -replace=github.com/projectcalico/libcalico-go=../libcalico-go
 else
-local_build:
+$(LOCAL_BUILD_DEP):
 	@echo "Building app-policy"
 endif
 
@@ -101,7 +115,7 @@ bin/dikastes-amd64: ARCH=amd64
 bin/dikastes-arm64: ARCH=arm64
 bin/dikastes-ppc64le: ARCH=ppc64le
 bin/dikastes-s390x: ARCH=s390x
-bin/dikastes-%: local_build vendor proto $(SRC_FILES)
+bin/dikastes-%: $(LOCAL_BUILD_DEP) vendor proto $(SRC_FILES)
 	mkdir -p bin
 	$(DOCKER_RUN_RO) \
 	  -v $(CURDIR)/bin:/go/src/$(PACKAGE_NAME)/bin \
@@ -111,7 +125,7 @@ bin/healthz-amd64: ARCH=amd64
 bin/healthz-arm64: ARCH=arm64
 bin/healthz-ppc64le: ARCH=ppc64le
 bin/healthz-s390x: ARCH=s390x
-bin/healthz-%: local_build vendor proto $(SRC_FILES)
+bin/healthz-%: $(LOCAL_BUILD_DEP) vendor proto $(SRC_FILES)
 	mkdir -p bin || true
 	-mkdir -p .go-pkg-cache $(GOMOD_CACHE) || true
 	$(DOCKER_RUN_RO) \
@@ -210,12 +224,12 @@ endif
 # UT/FVs
 ###############################################################################
 .PHONY: ut
-ut: local_build proto
+ut: $(LOCAL_BUILD_DEP) proto
 	mkdir -p report
 	$(DOCKER_RUN) $(CALICO_BUILD) /bin/bash -c "go test -v $(GINKGO_ARGS) ./... | go-junit-report > ./report/tests.xml"
 
-fv:
-	@echo "No FVs currently available."
+fv st:
+	@echo "No FVs or STs currently available"
 
 ###############################################################################
 # CI
