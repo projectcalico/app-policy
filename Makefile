@@ -36,8 +36,10 @@ BUILD_IMAGE?=calico/dikastes
 PUSH_IMAGES?=$(BUILD_IMAGE) quay.io/calico/dikastes
 RELEASE_IMAGES?=gcr.io/projectcalico-org/dikastes eu.gcr.io/projectcalico-org/dikastes asia.gcr.io/projectcalico-org/dikastes us.gcr.io/projectcalico-org/dikastes
 
-BUILD_FLAGS	+= -mod=vendor
-GINKGO_ARGS	+= -mod=vendor
+# CI already specifies -mod=vendor and go doesn't allow an option to be passed in twice.
+ifneq ($(CI),true)
+	BUILD_ARGS	:= -mod=vendor
+endif
 
 # Build mounts for running in "local build" mode. This allows an easy build using local development code,
 # assuming that there is a local checkout of libcalico in the same directory as this repo.
@@ -226,7 +228,7 @@ endif
 .PHONY: ut
 ut: $(LOCAL_BUILD_DEP) proto
 	mkdir -p report
-	$(DOCKER_RUN) $(CALICO_BUILD) /bin/bash -c "go test -v $(GINKGO_ARGS) ./... | go-junit-report > ./report/tests.xml"
+	$(DOCKER_RUN) $(CALICO_BUILD) /bin/bash -c "go test -v $(BUILD_FLAGS) ./... | go-junit-report > ./report/tests.xml"
 
 fv st:
 	@echo "No FVs or STs currently available"
