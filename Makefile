@@ -1,6 +1,9 @@
 PACKAGE_NAME=github.com/projectcalico/app-policy
 GO_BUILD_VER=v0.27
 
+# app-policy still relies on vendoring
+GOMOD_VENDOR=true
+
 ###############################################################################
 # Download and include Makefile.common
 #   Additions to EXTRA_DOCKER_ARGS need to happen before the include since
@@ -35,11 +38,6 @@ include Makefile.common
 BUILD_IMAGE?=calico/dikastes
 PUSH_IMAGES?=$(BUILD_IMAGE) quay.io/calico/dikastes
 RELEASE_IMAGES?=gcr.io/projectcalico-org/dikastes eu.gcr.io/projectcalico-org/dikastes asia.gcr.io/projectcalico-org/dikastes us.gcr.io/projectcalico-org/dikastes
-
-# CI already specifies -mod=vendor and go doesn't allow an option to be passed in twice.
-ifneq ($(CI),true)
-	BUILD_ARGS	:= -mod=vendor
-endif
 
 # Build mounts for running in "local build" mode. This allows an easy build using local development code,
 # assuming that there is a local checkout of libcalico in the same directory as this repo.
