@@ -89,8 +89,7 @@ include Makefile.common
 .PHONY: clean
 ## Clean enough that a new release build will be clean
 clean:
-	rm -rf .go-pkg-cache report vendor bin proto/felixbackend.pb.go \
-		   proto/healthz.pb.go Makefile.common*
+	rm -rf .go-pkg-cache report vendor bin Makefile.common*
 	find . -name '*.created-$(ARCH)' -exec rm -f {} +
 	-docker rmi $(BUILD_IMAGE):latest-$(ARCH)
 	-docker rmi $(BUILD_IMAGE):$(VERSION)-$(ARCH)
