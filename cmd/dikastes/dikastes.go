@@ -49,6 +49,7 @@ Options:
   -h --help              Show this screen.
   -l --listen <port>     Unix domain socket path [default: /var/run/dikastes/dikastes.sock]
   -d --dial <target>     Target to dial. [default: localhost:50051]
+  --legacy-envoy-api     Use Envoy API v2.
   --debug                Log at Debug level.`
 
 var VERSION string
@@ -104,9 +105,11 @@ func runServer(arguments map[string]interface{}) {
 	stores := make(chan *policystore.PolicyStore)
 	checkServer := checker.NewServer(ctx, stores)
 	authz.RegisterAuthorizationServer(gs, checkServer)
-	checkServerV2 := checkServer.V2Compat()
-	authz_v2alpha.RegisterAuthorizationServer(gs, checkServerV2)
-	authz_v2.RegisterAuthorizationServer(gs, checkServerV2)
+	if arguments["--legacy-envoy-api"].(bool) {
+		checkServerV2 := checkServer.V2Compat()
+		authz_v2alpha.RegisterAuthorizationServer(gs, checkServerV2)
+		authz_v2.RegisterAuthorizationServer(gs, checkServerV2)
+	}
 
 	// Synchronize the policy store
 	opts := uds.GetDialOptions()
