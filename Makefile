@@ -1,5 +1,5 @@
 PACKAGE_NAME?=github.com/projectcalico/app-policy
-GO_BUILD_VER?=v0.57
+GO_BUILD_VER?=casey-enable-cgo
 
 ORGANIZATION=projectcalico
 SEMAPHORE_PROJECT_ID?=$(SEMAPHORE_APP_POLICY_PROJECT_ID)
@@ -118,6 +118,7 @@ bin/dikastes-s390x: ARCH=s390x
 bin/dikastes-%: local_build proto $(SRC_FILES)
 	mkdir -p bin
 	$(DOCKER_RUN_RO) \
+	  -e CGO_ENABLED=$(CGO_ENABLED) \
 	  -v $(CURDIR)/bin:/go/src/$(PACKAGE_NAME)/bin \
 	  $(CALICO_BUILD) go build $(BUILD_FLAGS) -ldflags "-X main.VERSION=$(GIT_VERSION) -s -w" -v -o bin/dikastes-$(ARCH) ./cmd/dikastes
 
@@ -129,6 +130,7 @@ bin/healthz-%: local_build proto $(SRC_FILES)
 	mkdir -p bin || true
 	-mkdir -p .go-pkg-cache $(GOMOD_CACHE) || true
 	$(DOCKER_RUN_RO) \
+	  -e CGO_ENABLED=$(CGO_ENABLED) \
 	  -v $(CURDIR)/bin:/go/src/$(PACKAGE_NAME)/bin \
 	  $(CALICO_BUILD) go build $(BUILD_FLAGS) -ldflags "-X main.VERSION=$(GIT_VERSION) -s -w" -v -o bin/healthz-$(ARCH) ./cmd/healthz
 
