@@ -77,6 +77,14 @@ Makefile.common.$(MAKE_BRANCH):
 
 include Makefile.common
 
+# We need CGO to leverage Boring SSL.  However, the cross-compile doesn't support CGO yet.
+# Currently CGO can be enbaled in ARM64 and AMD64 builds.
+ifeq ($(ARCH), $(filter $(ARCH),amd64 arm64))
+CGO_ENABLED=1
+else
+CGO_ENABLED=0
+endif
+
 # Shortcut targets
 default: build
 
@@ -118,6 +126,7 @@ bin/dikastes-s390x: ARCH=s390x
 bin/dikastes-%: local_build proto $(SRC_FILES)
 	mkdir -p bin
 	$(DOCKER_RUN_RO) \
+	  -e CGO_ENABLED=$(CGO_ENABLED) \
 	  -v $(CURDIR)/bin:/go/src/$(PACKAGE_NAME)/bin \
 	  $(CALICO_BUILD) go build $(BUILD_FLAGS) -ldflags "-X main.VERSION=$(GIT_VERSION) -s -w" -v -o bin/dikastes-$(ARCH) ./cmd/dikastes
 
@@ -129,6 +138,7 @@ bin/healthz-%: local_build proto $(SRC_FILES)
 	mkdir -p bin || true
 	-mkdir -p .go-pkg-cache $(GOMOD_CACHE) || true
 	$(DOCKER_RUN_RO) \
+	  -e CGO_ENABLED=$(CGO_ENABLED) \
 	  -v $(CURDIR)/bin:/go/src/$(PACKAGE_NAME)/bin \
 	  $(CALICO_BUILD) go build $(BUILD_FLAGS) -ldflags "-X main.VERSION=$(GIT_VERSION) -s -w" -v -o bin/healthz-$(ARCH) ./cmd/healthz
 
