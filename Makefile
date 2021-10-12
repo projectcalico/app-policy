@@ -1,5 +1,5 @@
 PACKAGE_NAME?=github.com/projectcalico/app-policy
-GO_BUILD_VER?=v0.57
+GO_BUILD_VER?=v0.58
 
 ORGANIZATION=projectcalico
 SEMAPHORE_PROJECT_ID?=$(SEMAPHORE_APP_POLICY_PROJECT_ID)
@@ -78,8 +78,7 @@ Makefile.common.$(MAKE_BRANCH):
 include Makefile.common
 
 # We need CGO to leverage Boring SSL.  However, the cross-compile doesn't support CGO yet.
-# Currently CGO can be enbaled in ARM64 and AMD64 builds.
-ifeq ($(ARCH), $(filter $(ARCH),amd64 arm64))
+ifeq ($(ARCH), $(filter $(ARCH),amd64))
 CGO_ENABLED=1
 else
 CGO_ENABLED=0
@@ -128,7 +127,7 @@ bin/dikastes-%: local_build proto $(SRC_FILES)
 	$(DOCKER_RUN_RO) \
 	  -e CGO_ENABLED=$(CGO_ENABLED) \
 	  -v $(CURDIR)/bin:/go/src/$(PACKAGE_NAME)/bin \
-	  $(CALICO_BUILD) go build $(BUILD_FLAGS) -ldflags "-X main.VERSION=$(GIT_VERSION) -s -w" -v -o bin/dikastes-$(ARCH) ./cmd/dikastes
+	  $(CALICO_BUILD) go build $(BUILD_FLAGS) -ldflags "-X main.VERSION=$(GIT_VERSION) -w" -v -o bin/dikastes-$(ARCH) ./cmd/dikastes
 
 bin/healthz-amd64: ARCH=amd64
 bin/healthz-arm64: ARCH=arm64
@@ -201,6 +200,11 @@ ut: local_build proto
 
 .PHONY: ci
 ci: mod-download build-all check-generated-files static-checks ut
+
+check-boring-ssl: bin/dikastes-amd64
+	$(DOCKER_RUN) -e CGO_ENABLED=$(CGO_ENABLED) $(CALICO_BUILD) \
+		go tool nm bin/dikastes-amd64 > bin/tags.txt && grep '_Cfunc__goboringcrypto_' bin/tags.txt 1> /dev/null
+	-rm -f bin/tags.txt
 
 ## Check if generated files are out of date
 .PHONY: check-generated-files
