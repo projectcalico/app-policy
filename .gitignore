@@ -1,8 +1,0 @@
-.idea/
-vendor/
-.go-pkg-cache/
-bin
-*.created-*
-report/
-release-notes-*
-Makefile.common*
